@@ -1,0 +1,22 @@
+FROM docker.io/library/debian:bookworm-slim
+
+ARG BUN_VERSION=bun-v1.4.5
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    cd /tmp; \
+    curl -fsSLO "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/bun-linux-x64.zip"; \
+    curl -fsSLO "https://github.com/oven-sh/bun/releases/download/${BUN_VERSION}/SHASUMS256.txt"; \
+    grep ' bun-linux-x64.zip$' SHASUMS256.txt | sha256sum -c -; \
+    unzip -q bun-linux-x64.zip; \
+    install -m 0755 bun-linux-x64/bun /usr/local/bin/bun; \
+    rm -rf /tmp/*; \
+    bun --version
+
+RUN useradd --create-home --uid 1000 --shell /bin/bash dev
+USER dev
+WORKDIR /home/dev
+CMD ["sleep", "infinity"]
