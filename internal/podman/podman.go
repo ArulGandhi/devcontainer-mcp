@@ -140,7 +140,12 @@ func (r *Runner) Exec(ctx context.Context, stdin io.Reader, argv ...string) (Res
 func (r *Runner) killRun(runID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), killTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, r.cfg.Binary, "exec", r.cfg.Container, "sh", "-c", killProcsScript, "sh", runID)
+	args := []string{"exec"}
+	if r.cfg.User != "" {
+		args = append(args, "--user", r.cfg.User)
+	}
+	args = append(args, r.cfg.Container, "sh", "-c", killProcsScript, "sh", runID)
+	cmd := exec.CommandContext(ctx, r.cfg.Binary, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

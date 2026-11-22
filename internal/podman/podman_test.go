@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -165,6 +166,32 @@ func TestExecTimeoutKillsChildProcesses(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	if running := processesWithCmdline(t, "sleep\x0053\x00"); running != 0 {
 		t.Fatalf("%d child process(es) survived the timeout", running)
+	}
+}
+
+func TestTimeoutCleanupRunsAsConfiguredUser(t *testing.T) {
+	fake := podmantest.Install(t)
+	r, err := New(Config{Binary: fake.Binary, Container: "devbox", User: "root", MaxOutput: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if _, err := r.Exec(ctx, nil, "sleep", "10"); err == nil {
+		t.Fatal("expected timeout")
+	}
+	var cleanupCalls int
+	for _, call := range regexp.MustCompile(`(?m)^exec `).Split(readLog(t, fake.Log), -1) {
+		if !strings.Contains(call, "kill -9") {
+			continue
+		}
+		cleanupCalls++
+		if !strings.HasPrefix(call, "--user root ") {
+			t.Errorf("cleanup call does not run as the configured user: %.60s", call)
+		}
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("got %d cleanup calls, want 1", cleanupCalls)
 	}
 }
 
