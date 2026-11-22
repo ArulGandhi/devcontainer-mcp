@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -50,6 +51,17 @@ func TestContainerUpBuildsAndCreatesWithLimits(t *testing.T) {
 		if !strings.Contains(calls, want) {
 			t.Errorf("missing call %q in:\n%s", want, calls)
 		}
+	}
+}
+
+func TestContainerUpPassesTargetArchitectureToTheBuild(t *testing.T) {
+	spec, log := fakePodman(t)
+	if err := containerUp(context.Background(), spec, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	want := "--build-arg TARGETARCH=" + runtime.GOARCH
+	if !strings.Contains(logText(t, log), want) {
+		t.Fatalf("older podman does not set TARGETARCH itself; build call lacks %q:\n%s", want, logText(t, log))
 	}
 }
 

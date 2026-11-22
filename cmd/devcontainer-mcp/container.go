@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -74,7 +75,7 @@ func containerUp(ctx context.Context, spec containerSpec, stdout io.Writer) erro
 			return fmt.Errorf("write Containerfile: %w", err)
 		}
 		fmt.Fprintf(stdout, "building %s (downloads Debian and bun, takes a minute)\n", spec.image)
-		if _, err := podmanRun(ctx, spec.podman, "build", "--tag", spec.image, "--file", filepath.Join(dir, "Containerfile"), dir); err != nil {
+		if _, err := podmanRun(ctx, spec.podman, "build", "--tag", spec.image, "--file", filepath.Join(dir, "Containerfile"), "--build-arg", "TARGETARCH="+runtime.GOARCH, dir); err != nil {
 			return fmt.Errorf("build image: %w", err)
 		}
 	}
