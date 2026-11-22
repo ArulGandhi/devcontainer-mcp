@@ -2,7 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -51,6 +54,10 @@ func main() {
 	switch {
 	case len(os.Args) > 1 && os.Args[1] == "init-auth":
 		err = initAuth(os.Args[2:], os.Stdin, os.Stdout)
+	case len(os.Args) > 1 && os.Args[1] == "init":
+		err = initAll(os.Args[2:], os.Stdin, os.Stdout)
+	case len(os.Args) > 1 && os.Args[1] == "container":
+		err = containerCmd(context.Background(), os.Args[2:], os.Stdout)
 	case len(os.Args) > 1 && os.Args[1] == "issue-client":
 		err = issueClient(os.Args[2:], os.Stdout)
 	default:
@@ -133,6 +140,61 @@ func issueClient(args []string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "client credentials written to %s (mode 600)\n", *clientFile)
 	fmt.Fprintf(stdout, "redirect URIs allowed: %s\n", strings.Join(uris, ", "))
 	fmt.Fprintln(stdout, "Any previous client secret is now invalid.")
+	return nil
+}
+
+// initAll is the one-command first-time setup: login file, authenticator secret and client credentials.
+// Without -password-stdin it generates a strong password and prints it once.
+func initAll(args []string, stdin io.Reader, stdout io.Writer) error {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	authFile := fs.String("auth-file", defaultConfigPath("auth.json"), "where to write the login file")
+	clientFile := fs.String("client-file", defaultConfigPath("client.txt"), "where to write the client ID and secret")
+	account := fs.String("account", "owner", "label shown in the authenticator app")
+	redirects := fs.String("redirect-uri", oauth.GeminiRedirectURI, "comma-separated redirect URIs the client may use")
+	force := fs.Bool("force", false, "overwrite an existing login file")
+	passwordStdin := fs.Bool("password-stdin", false, "read the password from stdin instead of generating one")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	var password string
+	generated := !*passwordStdin
+	if *passwordStdin {
+		line, err := bufio.NewReader(stdin).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return fmt.Errorf("read password: %w", err)
+		}
+		password = strings.TrimRight(line, "\r\n")
+	} else {
+		var raw [18]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return fmt.Errorf("generate password: %w", err)
+		}
+		password = base64.RawURLEncoding.EncodeToString(raw[:])
+	}
+
+	if err := os.MkdirAll(filepath.Dir(*authFile), 0o700); err != nil {
+		return fmt.Errorf("config directory: %w", err)
+	}
+	authArgs := []string{"-auth-file", *authFile, "-account", *account}
+	if *force {
+		authArgs = append(authArgs, "-force")
+	}
+	var authOut, clientOut bytes.Buffer
+	if err := initAuth(authArgs, strings.NewReader(password+"\n"), &authOut); err != nil {
+		return err
+	}
+	if err := issueClient([]string{"-auth-file", *authFile, "-client-file", *clientFile, "-redirect-uri", *redirects}, &clientOut); err != nil {
+		return err
+	}
+
+	if generated {
+		fmt.Fprintf(stdout, "Password (shown once, store it in a password manager): %s\n\n", password)
+	}
+	_, _ = stdout.Write(authOut.Bytes())
+	fmt.Fprintln(stdout)
+	_, _ = stdout.Write(clientOut.Bytes())
+	fmt.Fprintf(stdout, "\nOpen %s for the client ID and secret when your client asks for them.\n", *clientFile)
 	return nil
 }
 
