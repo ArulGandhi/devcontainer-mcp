@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `install.sh`: `curl | bash` installer that verifies the release checksum, installs the binary and runs first-time setup.
 - `-tunnel tailscale|ngrok`: public HTTPS address without a public IP; the URL is stable across restarts. Tailscale: the server refuses to overwrite an existing serve config and confirms Funnel is on; errors name the fix. ngrok: the server logs whether the public URL answers.
 - `init`: one command for the login file, authenticator secret and client credentials. Generates the password unless `-password-stdin` is given.
 - `container up`: builds the embedded Containerfile (x64 and arm64) and runs the container with memory, process and no-new-privileges limits.

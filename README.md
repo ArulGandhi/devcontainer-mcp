@@ -6,9 +6,13 @@ Made for connecting Gemini (Gemini Enterprise custom MCP server) to a sandbox yo
 
 ## Quickstart
 
-You need [podman](https://podman.io/docs/installation) (rootless) and Go 1.24 or newer.
+You need [podman](https://podman.io/docs/installation) (rootless).
 
-    go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest
+    curl -fsSL https://raw.githubusercontent.com/ArulGandhi/devcontainer-mcp/master/install.sh | bash
+
+This downloads the release binary for your OS and CPU, checks its SHA-256, installs it to `~/.local/bin`, then runs `init` and `container up` for you (no sudo). [Read the script](install.sh) first if you like. `DCM_NO_SETUP=1` installs only the binary; `DCM_VERSION` and `DCM_INSTALL_DIR` pick the release and location. Or build it yourself with Go 1.24+: `go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest`.
+
+Then, if you installed only the binary, run the steps by hand:
 
     devcontainer-mcp init               # login + authenticator secret + client ID/secret
     devcontainer-mcp container up       # builds and starts the sandbox container "devbox"
