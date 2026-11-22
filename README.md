@@ -4,7 +4,7 @@ An MCP server with one tool, `repl`, that runs TypeScript (bun) inside a podman 
 
 ## Install
 
-Linux with [rootless podman](https://podman.io/docs/installation) (macOS is untested).
+Linux with [rootless podman](https://podman.io/docs/installation) and Go 1.24+ (macOS is untested).
 
 1. Podman:
 
@@ -13,9 +13,15 @@ Linux with [rootless podman](https://podman.io/docs/installation) (macOS is unte
        sudo pacman -S podman            # Arch
        sudo zypper install podman       # openSUSE
 
-2. The binary: download it for your system from the Releases page and put it on your `PATH`, or build it with Go 1.24+:
+2. Clone, build and put it on your `PATH`:
 
-       go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest
+       git clone https://github.com/ArulGandhi/devcontainer-mcp.git
+       cd devcontainer-mcp
+       go build -o devcontainer-mcp ./cmd/devcontainer-mcp
+       install -Dm755 devcontainer-mcp ~/.local/bin/devcontainer-mcp
+       devcontainer-mcp version
+
+   If that last command says "not found", add `export PATH="$HOME/.local/bin:$PATH"` to your shell profile and open a new terminal.
 
 3. Set up the login and the sandbox:
 
