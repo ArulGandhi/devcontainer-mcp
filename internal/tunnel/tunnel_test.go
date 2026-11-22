@@ -14,6 +14,7 @@ echo "$*" >> "$FAKE_LOG"
 case "$1 $2" in
   "status --json") printf '%s' "$FAKE_STATUS" ;;
   "serve status") printf '%s' "$FAKE_SERVE" ;;
+  "funnel status") [ -n "$FAKE_FUNNEL_OFF" ] && echo "No serve config" || echo "https://box.tail1234.ts.net (Funnel on)" ;;
   funnel*) [ -n "$FAKE_FUNNEL_FAIL" ] && { echo "$FAKE_FUNNEL_FAIL" >&2; exit 1; } ;;
 esac
 exit 0
@@ -118,14 +119,50 @@ func TestTailscaleRefusesToOverwriteExistingServeConfig(t *testing.T) {
 	}
 }
 
-func TestTailscaleSurfacesFunnelFailure(t *testing.T) {
-	bin, _ := installFake(t, fakeTailscale)
+func runningTailscale(t *testing.T) (bin, log string) {
+	t.Helper()
+	bin, log = installFake(t, fakeTailscale)
 	t.Setenv("FAKE_STATUS", `{"BackendState":"Running","Self":{"DNSName":"box.tail1234.ts.net."}}`)
 	t.Setenv("FAKE_SERVE", "{}")
-	t.Setenv("FAKE_FUNNEL_FAIL", "Funnel not available")
+	return bin, log
+}
+
+func TestTailscaleFunnelNotEnabledGivesTheLink(t *testing.T) {
+	bin, _ := runningTailscale(t)
+	t.Setenv("FAKE_FUNNEL_FAIL", "Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n         https://login.tailscale.com/f/funnel?node=abc123\n")
 	_, err := Start(context.Background(), tsConfig(bin))
-	if err == nil || !strings.Contains(err.Error(), "Funnel not available") || !strings.Contains(err.Error(), "admin console") {
+	if err == nil || !strings.Contains(err.Error(), "https://login.tailscale.com/f/funnel?node=abc123") || strings.Contains(err.Error(), "killed") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTailscaleAccessDeniedExplainsOperator(t *testing.T) {
+	bin, _ := runningTailscale(t)
+	t.Setenv("FAKE_FUNNEL_FAIL", "sending serve config: Access denied: serve config denied")
+	_, err := Start(context.Background(), tsConfig(bin))
+	if err == nil || !strings.Contains(err.Error(), "set --operator") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTailscaleOtherFunnelFailureKeepsOutput(t *testing.T) {
+	bin, _ := runningTailscale(t)
+	t.Setenv("FAKE_FUNNEL_FAIL", "something unexpected")
+	_, err := Start(context.Background(), tsConfig(bin))
+	if err == nil || !strings.Contains(err.Error(), "something unexpected") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTailscaleVerifiesFunnelIsOnAndRollsBack(t *testing.T) {
+	bin, log := runningTailscale(t)
+	t.Setenv("FAKE_FUNNEL_OFF", "1")
+	_, err := Start(context.Background(), tsConfig(bin))
+	if err == nil || !strings.Contains(err.Error(), "Funnel on") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(calls(t, log), "funnel --https=443 off") {
+		t.Fatalf("funnel not rolled back:\n%s", calls(t, log))
 	}
 }
 

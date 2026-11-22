@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -144,15 +145,35 @@ func startTailscale(ctx context.Context, cfg Config) (*Tunnel, error) {
 			"Run `tailscale funnel reset` if it is not needed, or expose the connector yourself and pass -public-url")
 	}
 
-	if _, err := run(ctx, cfg.Binary, "funnel", "--bg", "--yes", "--https=443", port(cfg.Addr)); err != nil {
-		return nil, fmt.Errorf("start funnel: %w (Funnel must be enabled for this machine in the Tailscale admin console)", err)
-	}
 	t := &Tunnel{URL: "https://" + host}
 	t.stop = func() error {
 		_, err := run(context.Background(), cfg.Binary, "funnel", "--https=443", "off")
 		return err
 	}
+	if out, err := run(ctx, cfg.Binary, "funnel", "--bg", "--yes", "--https=443", port(cfg.Addr)); err != nil {
+		return nil, funnelStartError(out, err)
+	}
+	status, err := run(ctx, cfg.Binary, "funnel", "status")
+	if err != nil || !strings.Contains(status, t.URL) || !strings.Contains(status, "Funnel on") {
+		_ = t.Stop()
+		return nil, fmt.Errorf("funnel started but %s is not shown as \"Funnel on\" in `tailscale funnel status`: %s", t.URL, strings.TrimSpace(status))
+	}
 	return t, nil
+}
+
+var tailscaleLink = regexp.MustCompile(`https://login\.tailscale\.com/\S+`)
+
+func funnelStartError(out string, err error) error {
+	switch {
+	case strings.Contains(out, "Access denied"):
+		return errors.New("tailscale will not let this user change its serve config. Run once: sudo tailscale set --operator=$USER")
+	case strings.Contains(out, "not enabled"):
+		if link := tailscaleLink.FindString(out); link != "" {
+			return fmt.Errorf("Funnel is not enabled on your tailnet. Open %s, enable it, then start again", link)
+		}
+		return errors.New("Funnel is not enabled on your tailnet. Enable it in the Tailscale admin console, then start again")
+	}
+	return fmt.Errorf("start funnel: %w", err)
 }
 
 func ngrokURL(domain string) (string, error) {

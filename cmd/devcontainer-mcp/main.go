@@ -331,7 +331,7 @@ func run(args []string, stderr io.Writer) error {
 	}()
 
 	logger.Info("listening", "addr", cfg.listen, "public_url", cfg.publicURL, "container", cfg.container, "tls", cfg.tlsCert != "")
-	if cfg.tunnel != "" {
+	if cfg.tunnel == tunnel.Ngrok {
 		go checkReachable(ctx, logger, cfg.publicURL)
 	}
 	var serveErr error
@@ -435,7 +435,8 @@ func openLogger(path string, stderr io.Writer) (*slog.Logger, func(), error) {
 }
 
 // checkReachable fetches a public discovery document through the public URL, so a tunnel that is up but
-// not forwarding shows in the log instead of as a mystery failure in the client.
+// not forwarding shows in the log instead of as a mystery failure in the client. Not used for Tailscale: this
+// machine resolves its own tailnet name to itself, so the check would not travel the public path.
 func checkReachable(ctx context.Context, logger *slog.Logger, publicURL string) {
 	target := strings.TrimSuffix(publicURL, "/") + "/.well-known/oauth-protected-resource"
 	client := &http.Client{Timeout: 10 * time.Second}

@@ -24,11 +24,11 @@ The server listens on `127.0.0.1:8787` and the client has to reach it over HTTPS
 
 | Option | URL | Needs |
 |---|---|---|
-| `-tunnel tailscale` | stable `*.ts.net` | free Tailscale account, `tailscale` installed and logged in, Funnel and HTTPS certificates enabled for the machine ([docs](https://tailscale.com/docs/features/tailscale-funnel)) |
+| `-tunnel tailscale` | stable `*.ts.net` | free Tailscale account, `tailscale` installed and logged in, Funnel enabled for your tailnet ([docs](https://tailscale.com/docs/features/tailscale-funnel)), and `sudo tailscale set --operator=$USER` run once so you can start Funnel without sudo |
 | `-tunnel ngrok -tunnel-domain NAME.ngrok-free.dev` | stable, the free static domain of your ngrok account | free ngrok account, `ngrok` installed with your authtoken |
 | `-public-url https://HOST` | yours | a public IP or your own reverse proxy; add `-tls-cert`/`-tls-key` to terminate TLS here |
 
-With a tunnel the server refuses to listen on a non-loopback address. Both tunnels are checked at startup, and the server logs whether the public URL answers.
+With a tunnel the server refuses to listen on a non-loopback address. Tailscale is checked at startup (Funnel must show as on); with ngrok the server also logs whether the public URL answers. The tunnel is taken down when the server stops.
 
 ## Connecting Gemini
 
@@ -79,8 +79,10 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
 - `container "devbox" is exited, not running`: `devcontainer-mcp container up`.
 - `tailscale is not connected`: run `tailscale up`.
+- `Funnel is not enabled on your tailnet`: open the link in the message, enable it, start again.
+- `tailscale will not let this user change its serve config`: run `sudo tailscale set --operator=$USER` once.
 - `tailscale already serves something`: the connector will not overwrite it. Remove it with `tailscale funnel reset` or expose the connector yourself and use `-public-url`.
-- Log says the public URL is not reachable: the tunnel is up but not forwarding; check the tunnel program's own status.
+- ngrok: log says the public URL is not reachable: the tunnel is up but not forwarding; check `ngrok`'s own output.
 - Client says the token is invalid after changing the public URL: tokens are bound to the URL, so log in again in the client.
 
 ## Flags
