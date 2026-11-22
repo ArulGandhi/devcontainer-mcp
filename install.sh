@@ -243,13 +243,26 @@ setup_tailscale() {
     exit 0
   fi
 
+  tailscale_state() {
+    tailscale status --json 2>/dev/null | sed -n 's/.*"BackendState": *"\([^"]*\)".*/\1/p' | head -1 || true
+  }
   local state
-  state="$(tailscale status --json 2>/dev/null | sed -n 's/.*"BackendState": *"\([^"]*\)".*/\1/p' | head -1 || true)"
+  state="$(tailscale_state)"
+  if [ -z "$state" ] && command -v systemctl >/dev/null 2>&1; then
+    say "The Tailscale service is not running; starting it."
+    run_root systemctl enable --now tailscaled
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      state="$(tailscale_state)"
+      [ -n "$state" ] && break
+      sleep 1
+    done
+  fi
+  [ -n "$state" ] || die "cannot reach the Tailscale service (tailscaled); start it, then run: devcontainer-mcp -tunnel tailscale"
   if [ "$state" != Running ]; then
     say
     say "Log in to Tailscale. A link appears below: open it in a browser and approve this machine."
     run_root tailscale up
-    state="$(tailscale status --json 2>/dev/null | sed -n 's/.*"BackendState": *"\([^"]*\)".*/\1/p' | head -1 || true)"
+    state="$(tailscale_state)"
     [ "$state" = Running ] || die "Tailscale is not connected (state '${state:-unknown}'); run 'sudo tailscale up' and try again"
   fi
 
