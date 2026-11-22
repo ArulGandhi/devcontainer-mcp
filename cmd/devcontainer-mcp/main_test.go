@@ -159,3 +159,13 @@ func TestBuildVersionPrefersInjectedValue(t *testing.T) {
 		t.Fatal("empty version")
 	}
 }
+
+func TestPrintConnectionListsClientValues(t *testing.T) {
+	var out bytes.Buffer
+	printConnection(&out, "https://box.tail1.ts.net/")
+	for _, want := range []string{"https://box.tail1.ts.net/mcp", "https://box.tail1.ts.net/authorize", "https://box.tail1.ts.net/token", "client.txt"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, out.String())
+		}
+	}
+}

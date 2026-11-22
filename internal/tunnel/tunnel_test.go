@@ -15,7 +15,9 @@ case "$1 $2" in
   "status --json") printf '%s' "$FAKE_STATUS" ;;
   "serve status") printf '%s' "$FAKE_SERVE" ;;
   "funnel status") [ -n "$FAKE_FUNNEL_OFF" ] && echo "No serve config" || echo "https://box.tail1234.ts.net (Funnel on)" ;;
-  funnel*) [ -n "$FAKE_FUNNEL_FAIL" ] && { echo "$FAKE_FUNNEL_FAIL" >&2; exit 1; } ;;
+  funnel*) [ -n "$FAKE_FUNNEL_LINK_THEN_OK" ] && { printf 'Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n         https://login.tailscale.com/f/funnel?node=abc\n'; sleep 1; exit 0; }
+           [ -n "$FAKE_FUNNEL_LINK_FOREVER" ] && { printf 'To enable, visit:\n https://login.tailscale.com/f/funnel?node=abc\n'; exec sleep 30; }
+           [ -n "$FAKE_FUNNEL_FAIL" ] && { echo "$FAKE_FUNNEL_FAIL" >&2; exit 1; } ;;
 esac
 exit 0
 `
@@ -227,4 +229,37 @@ func TestNgrokDeathAfterStartIsReported(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("tunnel death was not reported")
 	}
+}
+
+func TestTailscaleShowsEnableLinkWhileWaitingThenSucceeds(t *testing.T) {
+	bin, _ := runningTailscale(t)
+	t.Setenv("FAKE_FUNNEL_LINK_THEN_OK", "1")
+	var notes []string
+	cfg := tsConfig(bin)
+	cfg.Notify = func(m string) { notes = append(notes, m) }
+	tun, err := Start(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tun.Stop()
+	if len(notes) != 1 || !strings.Contains(notes[0], "https://login.tailscale.com/f/funnel?node=abc") {
+		t.Fatalf("notes = %q", notes)
+	}
+}
+
+func TestTailscaleGivesUpWhenFunnelNeverEnabled(t *testing.T) {
+	bin, log := runningTailscale(t)
+	t.Setenv("FAKE_FUNNEL_LINK_FOREVER", "1")
+	old := funnelWait
+	funnelWait = 1500 * time.Millisecond
+	defer func() { funnelWait = old }()
+	start := time.Now()
+	_, err := Start(context.Background(), tsConfig(bin))
+	if err == nil || !strings.Contains(err.Error(), "https://login.tailscale.com/f/funnel?node=abc") {
+		t.Fatalf("err = %v", err)
+	}
+	if time.Since(start) > 8*time.Second {
+		t.Fatalf("took %s", time.Since(start))
+	}
+	_ = log
 }

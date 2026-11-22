@@ -253,7 +253,10 @@ func run(args []string, stderr io.Writer) error {
 	}
 
 	if cfg.tunnel != "" {
-		tun, err := tunnel.Start(ctx, tunnel.Config{Provider: cfg.tunnel, Addr: cfg.listen, Domain: cfg.tunnelDomain})
+		tun, err := tunnel.Start(ctx, tunnel.Config{
+			Provider: cfg.tunnel, Addr: cfg.listen, Domain: cfg.tunnelDomain,
+			Notify: func(msg string) { fmt.Fprintln(stderr, msg) },
+		})
 		if err != nil {
 			return fmt.Errorf("tunnel: %w", err)
 		}
@@ -264,6 +267,7 @@ func run(args []string, stderr io.Writer) error {
 		}()
 		cfg.publicURL = tun.URL
 		logger.Info("tunnel up", "provider", cfg.tunnel, "public_url", tun.URL)
+		printConnection(stderr, tun.URL)
 		if done := tun.Done(); done != nil {
 			go func() {
 				select {
@@ -402,6 +406,13 @@ func parseConfig(args []string) (config, error) {
 		return config{}, fmt.Errorf("-listen %s is reachable from the network; set -tls-cert and -tls-key", cfg.listen)
 	}
 	return cfg, nil
+}
+
+// printConnection tells the operator what to enter in the client, in plain text rather than log lines.
+func printConnection(w io.Writer, publicURL string) {
+	base := strings.TrimSuffix(publicURL, "/")
+	fmt.Fprintf(w, "\nReady. Enter these in your MCP client:\n  MCP server URL:    %s%s\n  Authorization URL: %s/authorize\n  Token URL:         %s/token\n  Client ID/secret:  see %s\nLeave this running; Ctrl+C stops it and the public link.\n\n",
+		base, mcp.Path, base, base, defaultConfigPath("client.txt"))
 }
 
 func publicOrigin(raw string) (string, error) {

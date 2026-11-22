@@ -3,11 +3,13 @@
 package tunnel
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os/exec"
 	"regexp"
@@ -24,6 +26,9 @@ const (
 	ngrokSurviveWindow = 3 * time.Second
 )
 
+// funnelWait is how long Start waits for the operator to enable Funnel after showing the link.
+var funnelWait = 5 * time.Minute
+
 type Config struct {
 	Provider string
 	// Addr is the loopback address the connector listens on, host:port.
@@ -32,6 +37,8 @@ type Config struct {
 	Domain string
 	// Binary overrides the tunnel program path; empty uses the provider's name from PATH.
 	Binary string
+	// Notify receives messages the operator must act on while Start waits, such as the link that enables Funnel.
+	Notify func(string)
 }
 
 // Tunnel is a running tunnel. URL is the public origin clients use.
@@ -113,6 +120,42 @@ func run(ctx context.Context, bin string, args ...string) (string, error) {
 	return out.String(), nil
 }
 
+// runWatching is run with a longer limit that reports each Tailscale login link as soon as the program prints it.
+func runWatching(ctx context.Context, limit time.Duration, onLink func(string), bin string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	pr, pw := io.Pipe()
+	var mu sync.Mutex
+	var out strings.Builder
+	scanned := make(chan struct{})
+	go func() {
+		defer close(scanned)
+		sc := bufio.NewScanner(pr)
+		for sc.Scan() {
+			line := sc.Text()
+			mu.Lock()
+			out.WriteString(line + "\n")
+			mu.Unlock()
+			if link := tailscaleLink.FindString(line); link != "" {
+				onLink(link)
+			}
+		}
+	}()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	cmd.WaitDelay = 2 * time.Second
+	err := cmd.Run()
+	_ = pw.Close()
+	<-scanned
+	mu.Lock()
+	defer mu.Unlock()
+	if err != nil {
+		return out.String(), fmt.Errorf("%s %s: %w: %s", bin, strings.Join(args, " "), err, strings.TrimSpace(out.String()))
+	}
+	return out.String(), nil
+}
+
 type tailscaleStatus struct {
 	BackendState string
 	AuthURL      string
@@ -150,7 +193,14 @@ func startTailscale(ctx context.Context, cfg Config) (*Tunnel, error) {
 		_, err := run(context.Background(), cfg.Binary, "funnel", "--https=443", "off")
 		return err
 	}
-	if out, err := run(ctx, cfg.Binary, "funnel", "--bg", "--yes", "--https=443", port(cfg.Addr)); err != nil {
+	notified := false
+	onLink := func(link string) {
+		if cfg.Notify != nil && !notified {
+			notified = true
+			cfg.Notify(fmt.Sprintf("Funnel is not enabled on your tailnet. Open this link and enable it; waiting up to %s:\n  %s", funnelWait, link))
+		}
+	}
+	if out, err := runWatching(ctx, funnelWait, onLink, cfg.Binary, "funnel", "--bg", "--yes", "--https=443", port(cfg.Addr)); err != nil {
 		return nil, funnelStartError(out, err)
 	}
 	status, err := run(ctx, cfg.Binary, "funnel", "status")

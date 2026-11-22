@@ -6,13 +6,19 @@ Made for connecting Gemini (Gemini Enterprise custom MCP server) to a sandbox yo
 
 ## Quickstart
 
-You need [podman](https://podman.io/docs/installation) (rootless).
-
     curl -fsSL https://raw.githubusercontent.com/ArulGandhi/devcontainer-mcp/master/install.sh | bash
 
-This downloads the release binary for your OS and CPU, checks its SHA-256, installs it to `~/.local/bin`, then runs `init` and `container up` for you (no sudo). [Read the script](install.sh) first if you like. `DCM_NO_SETUP=1` installs only the binary; `DCM_VERSION` and `DCM_INSTALL_DIR` pick the release and location. Or build it yourself with Go 1.24+: `go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest`.
+Run it as a normal user. It walks you through everything and asks before each step that needs sudo:
 
-Then, if you installed only the binary, run the steps by hand:
+1. Installs podman if it is missing (apt, dnf, zypper or pacman; on macOS and other systems it tells you what to install).
+2. Downloads the release binary for your OS and CPU, verifies its SHA-256 and installs it to `~/.local/bin`.
+3. Runs `init`: prints a generated password, an authenticator entry and writes the client ID and secret. Save the password now; it is shown once.
+4. Builds and starts the sandbox container.
+5. Asks how clients will reach you. With Tailscale Funnel (recommended) it installs Tailscale if missing (Tailscale's official installer), shows the login link to approve this machine, shows the link that enables Funnel, then starts the server and prints the three URLs to enter in your client.
+
+[Read the script](install.sh) first if you like. Options: `DCM_YES=1` (answer yes to everything), `DCM_TUNNEL=tailscale|other|none`, `DCM_DRY_RUN=1` (show what would be installed, change nothing), `DCM_NO_SETUP=1` (binary only), `DCM_VERSION`, `DCM_INSTALL_DIR`. Without a terminal the script never guesses: it stops and tells you what to do.
+
+Or do it by hand (build with Go 1.24+: `go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest`):
 
     devcontainer-mcp init               # login + authenticator secret + client ID/secret
     devcontainer-mcp container up       # builds and starts the sandbox container "devbox"
@@ -20,7 +26,7 @@ Then, if you installed only the binary, run the steps by hand:
 
 `init` prints a generated password and an `otpauth://` URI once. Add the URI to your authenticator app and keep the password. The client ID and secret are written to `~/.config/devcontainer-mcp/client.txt` (mode 600).
 
-The last command prints the public URL (for Tailscale: `https://<machine>.<tailnet>.ts.net`). It stays the same across restarts, so you only configure your client once.
+The last command prints the public URL (for Tailscale: `https://<machine>.<tailnet>.ts.net`) and the values to enter in your client. If Funnel is not enabled on your Tailscale account yet it prints the link to enable it and waits up to 5 minutes. The URL stays the same across restarts, so you only configure your client once.
 
 ## Reaching it from the internet
 
