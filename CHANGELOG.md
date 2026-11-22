@@ -2,7 +2,14 @@
 
 ## Unreleased
 
+- `-tunnel tailscale|ngrok`: public HTTPS address without a public IP; the URL is stable across restarts. The server checks that the public URL answers and logs the result.
+- `init`: one command for the login file, authenticator secret and client credentials. Generates the password unless `-password-stdin` is given.
+- `container up`: builds the embedded Containerfile (x64 and arm64) and runs the container with memory, process and no-new-privileges limits.
+- `-container` defaults to `devbox`. `-public-url` is optional with `-tunnel`.
+- `version` subcommand.
+- Fixed: after a timeout, cleanup ran as the container's default user, so with `-user root` timed-out processes kept running.
+- Module renamed to `github.com/ArulGandhi/devcontainer-mcp`. Minimum Go is 1.24.
+- MIT license, CI, release workflow, SECURITY.md, CONTRIBUTING.md.
 - `repl`: TypeScript with bun in a podman container, home directory as working directory. Runs with `timeout_seconds` are killed when they exceed it; runs without it are backgrounded after 30 seconds.
 - OAuth 2.1 with PKCE and a pre-registered client ID and secret. Login is password plus TOTP. Refresh tokens rotate. Dynamic client registration is not offered.
 - Static bearer token removed.
-- `devbox/Containerfile`: Debian slim with bun 1.4.5 (SHA-256 verified), non-root user.

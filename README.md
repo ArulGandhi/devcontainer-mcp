@@ -1,6 +1,48 @@
 # devcontainer-mcp
 
-An MCP server that gives an LLM one tool, `repl`, to run TypeScript (bun) inside a long-running podman container. It serves MCP over Streamable HTTP (protocol 2025-06-18) and protects it with OAuth 2.1 (authorization code + PKCE, pre-registered client).
+An MCP server that gives an LLM one tool, `repl`, which runs TypeScript (bun) inside a long-running podman container. It speaks MCP over Streamable HTTP and protects it with OAuth 2.1 (authorization code + PKCE, pre-registered client, password + TOTP login). Written in Go, standard library only.
+
+Made for connecting Gemini (Gemini Enterprise custom MCP server) to a sandbox you control. Any MCP client that supports OAuth 2.1 with a pre-registered client works.
+
+## Quickstart
+
+You need [podman](https://podman.io/docs/installation) (rootless) and Go 1.24 or newer.
+
+    go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest
+
+    devcontainer-mcp init               # login + authenticator secret + client ID/secret
+    devcontainer-mcp container up       # builds and starts the sandbox container "devbox"
+    devcontainer-mcp -tunnel tailscale  # serves it on a public HTTPS address
+
+`init` prints a generated password and an `otpauth://` URI once. Add the URI to your authenticator app and keep the password. The client ID and secret are written to `~/.config/devcontainer-mcp/client.txt` (mode 600).
+
+The last command prints the public URL (for Tailscale: `https://<machine>.<tailnet>.ts.net`). It stays the same across restarts, so you only configure your client once.
+
+## Reaching it from the internet
+
+The server listens on `127.0.0.1:8787` and the client has to reach it over HTTPS. Pick one:
+
+| Option | URL | Needs |
+|---|---|---|
+| `-tunnel tailscale` | stable `*.ts.net` | free Tailscale account, `tailscale` installed and logged in, Funnel and HTTPS certificates enabled for the machine ([docs](https://tailscale.com/docs/features/tailscale-funnel)) |
+| `-tunnel ngrok -tunnel-domain NAME.ngrok-free.dev` | stable, the free static domain of your ngrok account | free ngrok account, `ngrok` installed with your authtoken |
+| `-public-url https://HOST` | yours | a public IP or your own reverse proxy; add `-tls-cert`/`-tls-key` to terminate TLS here |
+
+With a tunnel the server refuses to listen on a non-loopback address. Both tunnels are checked at startup, and the server logs whether the public URL answers.
+
+## Connecting Gemini
+
+In the Google Cloud console: Gemini Enterprise, Data stores, create a data store, choose Custom MCP Server, Add MCP server, OAuth 2.0. Labels may differ from this list; use these values.
+
+- MCP server URL: `<public URL>/mcp`
+- Authorization URL: `<public URL>/authorize`
+- Token URL: `<public URL>/token`
+- Client ID and secret: from `client.txt`
+- Redirect URI (already allowed by default): `https://vertexaisearch.cloud.google.com/oauth-redirect`
+
+Then click Login, sign in with the password and a TOTP code, and enable the `repl` tool. An organization policy may block custom MCP data stores until an admin overrides it.
+
+For another client, pass its redirect URI: `devcontainer-mcp init -redirect-uri https://client.example/callback` (or run `issue-client -redirect-uri ...` later).
 
 ## The tool
 
@@ -11,25 +53,9 @@ An MCP server that gives an LLM one tool, `repl`, to run TypeScript (bun) inside
 
 ## Container
 
-    podman build -t devbox:latest devbox/
-    podman run -d --name devbox --init --restart=unless-stopped devbox:latest
+`container up` builds an embedded Containerfile (Debian slim, bun with a verified checksum, non-root user `dev`, x64 and arm64) and starts it with `--init`, `--restart=unless-stopped`, `--memory 2g`, `--pids-limit 512` and `no-new-privileges`. Flags: `-name`, `-image`, `-memory`, `-pids-limit`, `-rebuild`. Running again keeps a running container and starts a stopped one.
 
-## Setup
-
-1. Build: `go build -o devcontainer-mcp ./cmd/devcontainer-mcp`
-2. Set the login (password read from stdin, TOTP secret printed once for your authenticator app):
-
-       read -rs PW; printf '%s\n' "$PW" | devcontainer-mcp init-auth; unset PW
-
-3. Issue the client ID and secret for clients that need a pre-registered pair (Gemini):
-
-       devcontainer-mcp issue-client
-
-   The pair is written to `~/.config/devcontainer-mcp/client.txt` (mode 600), not printed. Re-running replaces it. Allowed redirect URIs default to `https://vertexaisearch.cloud.google.com/oauth-redirect`; change with `-redirect-uri`.
-4. Run (TLS is required off loopback):
-
-       devcontainer-mcp -container devbox -public-url https://HOST \
-         -listen 0.0.0.0:443 -tls-cert cert.pem -tls-key key.pem
+To run as root inside the container, pass `-user root` to the server. With rootless podman, container root is an unprivileged user on the host.
 
 ## Endpoints
 
@@ -40,11 +66,33 @@ An MCP server that gives an LLM one tool, `repl`, to run TypeScript (bun) inside
 
 ## Security model
 
+- Anyone with a valid token can run code in the container. The container is the blast radius: its mounts, network and limits define what the model can reach. Do not mount anything you would not hand to the model.
 - Login: one operator password (PBKDF2-SHA256, 600k iterations) plus a TOTP code. Five failed attempts lock login for 15 minutes.
 - Tokens are bound to the MCP resource URL (RFC 8707). Only hashes are stored.
-- Anyone with a valid token can run code in the container. The container is the blast radius: its mounts and network define what the model can reach.
-- Every call is written to the audit log.
+- Requests are rate limited, size limited and origin checked. Every call is written to the audit log (`-audit-log`, default stderr).
+- Dynamic client registration is not offered. Re-running `issue-client` invalidates the old client secret.
+- A tunnel makes the login page reachable from the whole internet. Use a long password.
+
+Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
+## Troubleshooting
+
+- `container "devbox" is exited, not running`: `devcontainer-mcp container up`.
+- `tailscale is not connected`: run `tailscale up`.
+- `tailscale already serves something`: the connector will not overwrite it. Remove it with `tailscale funnel reset` or expose the connector yourself and use `-public-url`.
+- Log says the public URL is not reachable: the tunnel is up but not forwarding; check the tunnel program's own status.
+- Client says the token is invalid after changing the public URL: tokens are bound to the URL, so log in again in the client.
 
 ## Flags
 
-See `devcontainer-mcp -h`. Notable: `-public-url` (required), `-container` (required), `-auth-file`, `-state-file`, `-exec-timeout`, `-rate-limit`, `-audit-log`.
+See `devcontainer-mcp -h`. Subcommands: `init`, `container up`, `issue-client`, `init-auth`, `version`. Notable flags: `-tunnel`, `-tunnel-domain`, `-public-url`, `-container`, `-user`, `-auth-file`, `-state-file`, `-exec-timeout`, `-rate-limit`, `-audit-log`.
+
+## Development
+
+    go vet ./... && go test -race ./...
+
+Tests use a fake podman and fake tunnel programs; no root, network or containers needed. To also test against real podman: `DEVCONTAINER_MCP_TEST_CONTAINER=<running container> go test ./internal/podman`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
