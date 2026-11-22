@@ -1,3 +1,4 @@
 devhelp/
 /devcontainer-mcp
 *.test
+/public

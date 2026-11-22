@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- One-page site (`site/`, `vercel.json`) serving the installer at `https://devcontainer-mcp.vercel.app/install.sh`; the install command no longer points at GitHub.
+- `container up`: passes the CPU architecture to the build explicitly (Debian 12's podman does not set it).
 - `install.sh`: `curl | bash` installer. Installs podman (apt, dnf, zypper, pacman) and Tailscale if missing, always asking before sudo; verifies the release checksum; runs `init` and `container up`; shows the Tailscale login link; starts the server. Refuses to run as root.
 - With `-tunnel tailscale` the server shows the link that enables Funnel and waits up to 5 minutes for it, then prints the URLs to enter in the client.
 - `-tunnel tailscale|ngrok`: public HTTPS address without a public IP; the URL is stable across restarts. Tailscale: the server refuses to overwrite an existing serve config and confirms Funnel is on; errors name the fix. ngrok: the server logs whether the public URL answers.

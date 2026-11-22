@@ -2,7 +2,7 @@
 # Installs devcontainer-mcp from a GitHub release and sets everything up: podman, the sandbox
 # container, login, and (optionally) a public HTTPS link through Tailscale.
 #
-#   curl -fsSL https://raw.githubusercontent.com/ArulGandhi/devcontainer-mcp/master/install.sh | bash
+#   curl -fsSL https://devcontainer-mcp.vercel.app/install.sh | bash
 #
 # Run it as a normal user. Anything that needs root (installing podman or Tailscale) is shown
 # first and only run through sudo after you say yes. Environment:

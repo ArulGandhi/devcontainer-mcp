@@ -6,7 +6,7 @@ Made for connecting Gemini (Gemini Enterprise custom MCP server) to a sandbox yo
 
 ## Quickstart
 
-    curl -fsSL https://raw.githubusercontent.com/ArulGandhi/devcontainer-mcp/master/install.sh | bash
+    curl -fsSL https://devcontainer-mcp.vercel.app/install.sh | bash
 
 Run it as a normal user. It walks you through everything and asks before each step that needs sudo:
 
@@ -16,7 +16,7 @@ Run it as a normal user. It walks you through everything and asks before each st
 4. Builds and starts the sandbox container.
 5. Asks how clients will reach you. With Tailscale Funnel (recommended) it installs Tailscale if missing (Tailscale's official installer), shows the login link to approve this machine, shows the link that enables Funnel, then starts the server and prints the three URLs to enter in your client.
 
-[Read the script](install.sh) first if you like. Options: `DCM_YES=1` (answer yes to everything), `DCM_TUNNEL=tailscale|other|none`, `DCM_DRY_RUN=1` (show what would be installed, change nothing), `DCM_NO_SETUP=1` (binary only), `DCM_VERSION`, `DCM_INSTALL_DIR`. Without a terminal the script never guesses: it stops and tells you what to do.
+[Read the script](install.sh) first if you like (it is also served at the same address in a browser). Options: `DCM_YES=1` (answer yes to everything), `DCM_TUNNEL=tailscale|other|none`, `DCM_DRY_RUN=1` (show what would be installed, change nothing), `DCM_NO_SETUP=1` (binary only), `DCM_VERSION`, `DCM_INSTALL_DIR`. Without a terminal the script never guesses: it stops and tells you what to do.
 
 Or do it by hand (build with Go 1.24+: `go install github.com/ArulGandhi/devcontainer-mcp/cmd/devcontainer-mcp@latest`):
 
