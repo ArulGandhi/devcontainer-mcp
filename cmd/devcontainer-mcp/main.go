@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ArulGandhi/gemini-connector/internal/devcontainer"
-	"github.com/ArulGandhi/gemini-connector/internal/httpguard"
-	"github.com/ArulGandhi/gemini-connector/internal/mcp"
-	"github.com/ArulGandhi/gemini-connector/internal/oauth"
-	"github.com/ArulGandhi/gemini-connector/internal/podman"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/devcontainer"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/httpguard"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/mcp"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/oauth"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/podman"
 )
 
 type config struct {

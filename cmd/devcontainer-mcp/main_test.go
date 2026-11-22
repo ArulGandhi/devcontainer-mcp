@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ArulGandhi/gemini-connector/internal/oauth"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/oauth"
 )
 
 func baseArgs(extra ...string) []string {

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ArulGandhi/gemini-connector/internal/mcp"
-	"github.com/ArulGandhi/gemini-connector/internal/podman"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/mcp"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/podman"
 )
 
 const (

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ArulGandhi/gemini-connector/internal/podman/podmantest"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/podman/podmantest"
 )
 
 func newFakeRunner(t *testing.T, maxOutput int) (*Runner, podmantest.Fake) {

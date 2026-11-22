@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ArulGandhi/gemini-connector/internal/mcp"
-	"github.com/ArulGandhi/gemini-connector/internal/podman"
-	"github.com/ArulGandhi/gemini-connector/internal/podman/podmantest"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/mcp"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/podman"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/podman/podmantest"
 )
 
 func newRepl(t *testing.T) (mcp.Tool, podmantest.Fake) {
