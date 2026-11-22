@@ -146,3 +146,16 @@ func TestIssueClientNeedsLoginFirst(t *testing.T) {
 		t.Fatal("expected error without a login file")
 	}
 }
+
+func TestBuildVersionPrefersInjectedValue(t *testing.T) {
+	old := version
+	defer func() { version = old }()
+	version = "v9.9.9"
+	if got := buildVersion(); got != "v9.9.9" {
+		t.Fatalf("got %q", got)
+	}
+	version = ""
+	if got := buildVersion(); got == "" {
+		t.Fatal("empty version")
+	}
+}

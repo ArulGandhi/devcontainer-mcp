@@ -1,3 +1,3 @@
 module github.com/ArulGandhi/devcontainer-mcp
 
-go 1.27.4
+go 1.24.0

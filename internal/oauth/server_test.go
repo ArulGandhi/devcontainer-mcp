@@ -525,7 +525,7 @@ func TestLoginTicketExpires(t *testing.T) {
 func TestNewRejectsPlainHTTPPublicURL(t *testing.T) {
 	auth, _, _ := issuedSecret(t)
 	store, _ := OpenStore(filepath.Join(t.TempDir(), "s.json"))
-	if _, err := New(Config{PublicURL: "http://35.200.139.38", Auth: auth, Store: store, Logger: slog.Default()}); err == nil {
+	if _, err := New(Config{PublicURL: "http://203.0.113.10", Auth: auth, Store: store, Logger: slog.Default()}); err == nil {
 		t.Fatal("expected refusal for plain http on a public host")
 	}
 }

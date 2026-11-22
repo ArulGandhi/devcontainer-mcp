@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -49,9 +50,13 @@ type config struct {
 	auditLog       string
 }
 
+var version = ""
+
 func main() {
 	var err error
 	switch {
+	case len(os.Args) > 1 && (os.Args[1] == "-version" || os.Args[1] == "--version" || os.Args[1] == "version"):
+		fmt.Println(buildVersion())
 	case len(os.Args) > 1 && os.Args[1] == "init-auth":
 		err = initAuth(os.Args[2:], os.Stdin, os.Stdout)
 	case len(os.Args) > 1 && os.Args[1] == "init":
@@ -67,6 +72,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "devcontainer-mcp: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
 }
 
 func defaultConfigPath(name string) string {
