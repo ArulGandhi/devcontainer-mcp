@@ -14,10 +14,32 @@ func baseArgs(extra ...string) []string {
 	return append([]string{"-container", "devbox", "-public-url", "https://host.example"}, extra...)
 }
 
-func TestParseConfigRequiresContainer(t *testing.T) {
-	_, err := parseConfig([]string{"-public-url", "https://host.example"})
-	if err == nil || !strings.Contains(err.Error(), "-container") {
-		t.Fatalf("err = %v", err)
+func TestParseConfigDefaultsContainerToDevbox(t *testing.T) {
+	cfg, err := parseConfig([]string{"-public-url", "https://host.example"})
+	if err != nil || cfg.container != "devbox" {
+		t.Fatalf("container = %q err %v", cfg.container, err)
+	}
+}
+
+func TestParseConfigTunnelReplacesPublicURL(t *testing.T) {
+	cfg, err := parseConfig([]string{"-tunnel", "tailscale"})
+	if err != nil || cfg.tunnel != "tailscale" {
+		t.Fatalf("cfg %+v err %v", cfg, err)
+	}
+}
+
+func TestParseConfigTunnelConflicts(t *testing.T) {
+	cases := map[string][]string{
+		"public url":      {"-tunnel", "tailscale", "-public-url", "https://host.example"},
+		"tls":             {"-tunnel", "tailscale", "-tls-cert", "c", "-tls-key", "k"},
+		"network listen":  {"-tunnel", "tailscale", "-listen", "0.0.0.0:8787"},
+		"unknown":         {"-tunnel", "frp"},
+		"ngrok no domain": {"-tunnel", "ngrok"},
+	}
+	for name, args := range cases {
+		if _, err := parseConfig(args); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
 	}
 }
 

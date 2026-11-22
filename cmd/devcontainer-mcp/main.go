@@ -22,11 +22,14 @@ import (
 	"github.com/ArulGandhi/devcontainer-mcp/internal/mcp"
 	"github.com/ArulGandhi/devcontainer-mcp/internal/oauth"
 	"github.com/ArulGandhi/devcontainer-mcp/internal/podman"
+	"github.com/ArulGandhi/devcontainer-mcp/internal/tunnel"
 )
 
 type config struct {
 	listen         string
 	publicURL      string
+	tunnel         string
+	tunnelDomain   string
 	container      string
 	user           string
 	authFile       string
@@ -172,6 +175,30 @@ func run(args []string, stderr io.Writer) error {
 		logger.Warn("container is not running; tool calls will fail until it is started", "container", cfg.container, "state", state)
 	}
 
+	if cfg.tunnel != "" {
+		tun, err := tunnel.Start(ctx, tunnel.Config{Provider: cfg.tunnel, Addr: cfg.listen, Domain: cfg.tunnelDomain})
+		if err != nil {
+			return fmt.Errorf("tunnel: %w", err)
+		}
+		defer func() {
+			if err := tun.Stop(); err != nil {
+				logger.Error("stop tunnel", "error", err)
+			}
+		}()
+		cfg.publicURL = tun.URL
+		logger.Info("tunnel up", "provider", cfg.tunnel, "public_url", tun.URL)
+		if done := tun.Done(); done != nil {
+			go func() {
+				select {
+				case err := <-done:
+					logger.Error("tunnel died; shutting down", "error", err)
+					stop()
+				case <-ctx.Done():
+				}
+			}()
+		}
+	}
+
 	tools, err := devcontainer.New(runner, devcontainer.Options{Timeout: cfg.execTimeout, Logger: logger})
 	if err != nil {
 		return err
@@ -227,6 +254,9 @@ func run(args []string, stderr io.Writer) error {
 	}()
 
 	logger.Info("listening", "addr", cfg.listen, "public_url", cfg.publicURL, "container", cfg.container, "tls", cfg.tlsCert != "")
+	if cfg.tunnel != "" {
+		go checkReachable(ctx, logger, cfg.publicURL)
+	}
 	var serveErr error
 	if cfg.tlsCert != "" {
 		serveErr = httpServer.ListenAndServeTLS(cfg.tlsCert, cfg.tlsKey)
@@ -243,8 +273,10 @@ func parseConfig(args []string) (config, error) {
 	var cfg config
 	fs := flag.NewFlagSet("devcontainer-mcp", flag.ContinueOnError)
 	fs.StringVar(&cfg.listen, "listen", "127.0.0.1:8787", "address to listen on; a non-loopback address requires -tls-cert and -tls-key")
-	fs.StringVar(&cfg.publicURL, "public-url", "", "public origin clients use, e.g. https://host.example (required); the MCP endpoint is /mcp under it")
-	fs.StringVar(&cfg.container, "container", "", "name or ID of the podman container to control (required)")
+	fs.StringVar(&cfg.publicURL, "public-url", "", "public origin clients use, e.g. https://host.example (required unless -tunnel is set); the MCP endpoint is /mcp under it")
+	fs.StringVar(&cfg.tunnel, "tunnel", "", "get a public HTTPS address without a public IP: \"tailscale\" (Funnel) or \"ngrok\"; sets the public URL itself")
+	fs.StringVar(&cfg.tunnelDomain, "tunnel-domain", "", "static ngrok domain, e.g. name.ngrok-free.dev (required with -tunnel ngrok)")
+	fs.StringVar(&cfg.container, "container", "devbox", "name or ID of the podman container to control")
 	fs.StringVar(&cfg.user, "user", "", "user to run commands as inside the container; empty uses the container's default")
 	fs.StringVar(&cfg.authFile, "auth-file", defaultConfigPath("auth.json"), "login and client file made by init-auth and issue-client")
 	fs.StringVar(&cfg.stateFile, "state-file", defaultConfigPath("oauth-state.json"), "file holding token hashes and the last TOTP step")
@@ -263,10 +295,12 @@ func parseConfig(args []string) (config, error) {
 	}
 
 	switch {
-	case cfg.container == "":
-		return config{}, errors.New("-container is required")
-	case cfg.publicURL == "":
-		return config{}, errors.New("-public-url is required")
+	case cfg.tunnel != "" && cfg.publicURL != "":
+		return config{}, errors.New("-tunnel sets the public URL itself; drop -public-url")
+	case cfg.tunnel == "" && cfg.publicURL == "":
+		return config{}, errors.New("-public-url is required (or use -tunnel tailscale|ngrok when this machine has no public address)")
+	case cfg.tunnel != "" && cfg.tlsCert != "":
+		return config{}, errors.New("-tunnel terminates TLS itself; drop -tls-cert and -tls-key")
 	case (cfg.tlsCert == "") != (cfg.tlsKey == ""):
 		return config{}, errors.New("-tls-cert and -tls-key must be given together")
 	case cfg.execTimeout < time.Second:
@@ -278,6 +312,14 @@ func parseConfig(args []string) (config, error) {
 	host, _, err := net.SplitHostPort(cfg.listen)
 	if err != nil {
 		return config{}, fmt.Errorf("-listen: %w", err)
+	}
+	if cfg.tunnel != "" {
+		if !isLoopback(host) {
+			return config{}, fmt.Errorf("-listen %s must be a loopback address with -tunnel", cfg.listen)
+		}
+		if err := tunnel.Validate(tunnel.Config{Provider: cfg.tunnel, Addr: cfg.listen, Domain: cfg.tunnelDomain}); err != nil {
+			return config{}, err
+		}
 	}
 	if !isLoopback(host) && cfg.tlsCert == "" {
 		return config{}, fmt.Errorf("-listen %s is reachable from the network; set -tls-cert and -tls-key", cfg.listen)
@@ -313,4 +355,35 @@ func openLogger(path string, stderr io.Writer) (*slog.Logger, func(), error) {
 		closeFn = func() { _ = f.Close() }
 	}
 	return slog.New(slog.NewJSONHandler(out, nil)), closeFn, nil
+}
+
+// checkReachable fetches a public discovery document through the public URL, so a tunnel that is up but
+// not forwarding shows in the log instead of as a mystery failure in the client.
+func checkReachable(ctx context.Context, logger *slog.Logger, publicURL string) {
+	target := strings.TrimSuffix(publicURL, "/") + "/.well-known/oauth-protected-resource"
+	client := &http.Client{Timeout: 10 * time.Second}
+	var lastErr error
+	for attempt := 0; attempt < 15; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			logger.Error("reachability check", "error", err)
+			return
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				logger.Info("reachable through the public URL", "url", publicURL)
+				return
+			}
+			err = fmt.Errorf("status %d", resp.StatusCode)
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+	logger.Warn("public URL is not reachable yet; clients will fail until it is", "url", publicURL, "error", lastErr)
 }
