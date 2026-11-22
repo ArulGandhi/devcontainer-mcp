@@ -1,6 +1,0 @@
-devhelp
-.git
-cmd
-internal
-go.mod
-*.test
